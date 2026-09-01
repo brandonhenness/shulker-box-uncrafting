@@ -1,0 +1,31 @@
+{
+  "fabric:load_conditions": {
+    "condition": "fabric:all_mods_loaded",
+    "values": [
+      "recipe_remainders"
+    ]
+  },
+  "type": "minecraft:crafting_shapeless",
+  "category": "misc",
+  "group": "shulker_box_uncrafting",
+  "ingredients": [
+    {
+      "fabric:type": "recipe_remainders:with_remainder",
+      "base": {
+        "fabric:type": "fabric:components",
+        "base": "#minecraft:shulker_boxes",
+        "components": {
+          "minecraft:container": [],
+          "!minecraft:container_loot": {}
+        }
+      },
+      "remainder": {
+        "id": "minecraft:chest"
+      }
+    }
+  ],
+  "result": {
+    "id": "minecraft:shulker_shell",
+    "count": 2
+  }
+}

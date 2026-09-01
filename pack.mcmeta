@@ -1,0 +1,18 @@
+{
+  "pack": {
+    "description": {
+      "text": "Shulker Box Uncrafting",
+      "color": "light_purple",
+      "bold": true,
+      "extra": [
+        {
+          "text": "\nEmpty boxes -> 2 shells + chest",
+          "color": "gray",
+          "bold": false
+        }
+      ]
+    },
+    "max_format": 107,
+    "min_format": [107, 1]
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "fabric:load_conditions": {
+    "condition": "fabric:all_mods_loaded",
+    "values": [
+      "recipe_remainders"
+    ]
+  },
+  "parent": "minecraft:recipes/root",
+  "criteria": {
+    "has_shulker_box": {
+      "conditions": {
+        "items": [
+          {
+            "items": "#minecraft:shulker_boxes"
+          }
+        ]
+      },
+      "trigger": "minecraft:inventory_changed"
+    },
+    "has_the_recipe": {
+      "conditions": {
+        "recipe": "shulker_box_uncrafting:empty_shulker_box_to_shells"
+      },
+      "trigger": "minecraft:recipe_unlocked"
+    }
+  },
+  "requirements": [
+    [
+      "has_the_recipe",
+      "has_shulker_box"
+    ]
+  ],
+  "rewards": {
+    "recipes": [
+      "shulker_box_uncrafting:empty_shulker_box_to_shells"
+    ]
+  }
+}
