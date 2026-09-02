@@ -1,0 +1,82 @@
+name: Bug report
+description: Report a problem with the datapack or its recipe.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a problem. Please fill in the details below so it can be reproduced.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Describe what you saw and what you expected instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Include the box variant, whether it contained anything, and how you attempted to craft it.
+      placeholder: |
+        1. Place an empty purple shulker box in...
+        2. Click...
+        3. Observe...
+    validations:
+      required: true
+
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: List Minecraft, Shulker Box Uncrafting, Recipe Remainders, Fabric Loader, Fabric API, and Java versions.
+      placeholder: "Minecraft 26.2; datapack 1.0.0; Recipe Remainders 0.1.0; Loader 0.19.3; Fabric API 0.158.0+26.2; Java 25"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: server
+    attributes:
+      label: Server type
+      options:
+        - Dedicated Fabric server
+        - Singleplayer integrated server
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: client
+    attributes:
+      label: Client setup
+      description: Vanilla clients are supported; Recipe Remainders is optional on a connecting client.
+      options:
+        - Vanilla client
+        - Fabric client with Recipe Remainders
+        - Fabric client without Recipe Remainders
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log output
+      description: Paste the loading or crafting error from the server log. Remove access tokens, addresses, or other private information.
+      render: text
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I ran `/datapack list enabled` and included whether the pack appeared in the report above.
+          required: true
+        - label: I confirmed the shulker box was empty, or explained why I could not.
+          required: true
+        - label: I searched existing issues for the same problem.
+          required: true

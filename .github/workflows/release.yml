@@ -1,0 +1,452 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-verify:
+    name: Build and verify release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      version: ${{ steps.metadata.outputs.version }}
+      minecraft_version: ${{ steps.metadata.outputs.minecraft_version }}
+      archive_name: ${{ steps.metadata.outputs.archive_name }}
+      file_name: ${{ steps.metadata.outputs.file_name }}
+
+    steps:
+      - name: Check out tagged commit
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Check release metadata
+        id: metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          read_property() {
+            local key="$1"
+            sed -n "s/^${key}=//p" release.properties | tail -n 1 | tr -d '\r'
+          }
+
+          version="$(read_property version)"
+          release_type="$(read_property release_type)"
+          minecraft_version="$(read_property minecraft_version)"
+          archive_name="$(read_property archive_name)"
+
+          if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error title=Invalid release tag::Use a tag such as v1.0.0."
+            exit 1
+          fi
+
+          if [[ "$GITHUB_REF_NAME" != "v${version}" ]]; then
+            echo "::error title=Version mismatch::Tag $GITHUB_REF_NAME does not match version=${version}."
+            exit 1
+          fi
+
+          if [[ "$release_type" != "release" ]]; then
+            echo "::error title=Invalid release type::release_type must be release for this stable datapack."
+            exit 1
+          fi
+
+          if [[ -z "$minecraft_version" || -z "$archive_name" ]]; then
+            echo "::error title=Missing release metadata::minecraft_version and archive_name must be set."
+            exit 1
+          fi
+
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error title=Tag is not on main::Release tags must point to a commit contained in main."
+            exit 1
+          fi
+
+          if grep -Fqx "## [${version}] - Unreleased" CHANGELOG.md; then
+            echo "::error title=Changelog is not dated::Replace Unreleased with the release date before tagging."
+            exit 1
+          fi
+
+          escaped_version="${version//./\\.}"
+          if ! grep -Eq "^## \[${escaped_version}\] - [0-9]{4}-[0-9]{2}-[0-9]{2}$" CHANGELOG.md; then
+            echo "::error title=Missing changelog entry::Expected: ## [${version}] - YYYY-MM-DD."
+            exit 1
+          fi
+
+          file_name="${archive_name}-${version}+mc${minecraft_version}.zip"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "minecraft_version=$minecraft_version" >> "$GITHUB_OUTPUT"
+          echo "archive_name=$archive_name" >> "$GITHUB_OUTPUT"
+          echo "file_name=$file_name" >> "$GITHUB_OUTPUT"
+
+      - name: Validate and package datapack
+        shell: pwsh
+        run: ./scripts/build.ps1 -OutputDirectory dist
+
+      - name: Prepare release notes
+        shell: bash
+        env:
+          VERSION: ${{ steps.metadata.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          awk -v prefix="## [${VERSION}] - " '
+            index($0, prefix) == 1 { found = 1; capture = 1; next }
+            capture && /^## \[/ { exit }
+            capture && /^\[[^]]+\]:/ { exit }
+            capture { print }
+            END { if (!found) exit 1 }
+          ' CHANGELOG.md > dist/release-notes.md
+
+          sed -i '/./,$!d' dist/release-notes.md
+          if ! grep -q '[^[:space:]]' dist/release-notes.md; then
+            echo "::error title=Empty release notes::The changelog section has no content."
+            exit 1
+          fi
+
+      - name: Verify release bundle
+        shell: bash
+        env:
+          FILE_NAME: ${{ steps.metadata.outputs.file_name }}
+        run: |
+          set -euo pipefail
+          cd dist
+
+          if [[ ! -f "$FILE_NAME" || ! -f SHA256SUMS || ! -f release-notes.md ]]; then
+            echo "::error title=Incomplete release bundle::The ZIP, checksum, or release notes are missing."
+            exit 1
+          fi
+
+          sha256sum --check SHA256SUMS
+
+          mapfile -t zip_entries < <(unzip -Z1 "$FILE_NAME")
+          if [[ ! " ${zip_entries[*]} " =~ " pack.mcmeta " ||
+                ! " ${zip_entries[*]} " =~ " pack.png " ||
+                ! " ${zip_entries[*]} " =~ " LICENSE.txt " ]]; then
+            echo "::error title=Invalid datapack ZIP::Required root files are missing."
+            exit 1
+          fi
+
+      - name: Upload verified release bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-bundle-${{ steps.metadata.outputs.version }}
+          path: |
+            dist/${{ steps.metadata.outputs.file_name }}
+            dist/SHA256SUMS
+            dist/release-notes.md
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: true
+
+  publish:
+    name: Publish GitHub and Modrinth release
+    needs: build-and-verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download verified release bundle
+        uses: actions/download-artifact@v8
+        with:
+          name: release-bundle-${{ needs.build-and-verify.outputs.version }}
+          path: dist
+
+      - name: Verify downloaded files
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum --check SHA256SUMS
+
+      - name: Check publishing configuration
+        shell: bash
+        env:
+          MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
+          MODRINTH_PROJECT_ID: ${{ vars.MODRINTH_PROJECT_ID }}
+          RECIPE_REMAINDERS_PROJECT_ID: ${{ vars.RECIPE_REMAINDERS_PROJECT_ID }}
+          VERSION: ${{ needs.build-and-verify.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "$MODRINTH_TOKEN" ]]; then
+            echo "::error title=Missing secret::Add MODRINTH_TOKEN under repository Actions secrets."
+            exit 1
+          fi
+
+          if [[ ! "$MODRINTH_PROJECT_ID" =~ ^[A-Za-z0-9]{8}$ ]]; then
+            echo "::error title=Missing datapack project ID::Set MODRINTH_PROJECT_ID to this project's permanent eight-character Modrinth ID."
+            exit 1
+          fi
+
+          if [[ ! "$RECIPE_REMAINDERS_PROJECT_ID" =~ ^[A-Za-z0-9]{8}$ ]]; then
+            echo "::error title=Missing dependency project ID::Set RECIPE_REMAINDERS_PROJECT_ID to Recipe Remainders' permanent eight-character Modrinth ID."
+            exit 1
+          fi
+
+          if [[ "$MODRINTH_PROJECT_ID" == "$RECIPE_REMAINDERS_PROJECT_ID" ]]; then
+            echo "::error title=Invalid project IDs::The datapack and Recipe Remainders project IDs must be different."
+            exit 1
+          fi
+
+          user_agent="brandonhenness/shulker-box-uncrafting/${VERSION} (https://github.com/${GITHUB_REPOSITORY})"
+          response_file="dist/modrinth-versions.json"
+          if ! curl --fail-with-body --silent --show-error \
+            --header "Authorization: $MODRINTH_TOKEN" \
+            --header "User-Agent: $user_agent" \
+            "https://api.modrinth.com/v2/project/${MODRINTH_PROJECT_ID}/version?include_changelog=true" \
+            --output "$response_file"; then
+            echo "::error title=Modrinth preflight failed::Could not read the project's existing versions."
+            if [[ -s "$response_file" ]]; then
+              jq . "$response_file" 2> /dev/null || cat "$response_file"
+            fi
+            exit 1
+          fi
+
+          jq -e 'type == "array"' "$response_file" > /dev/null
+
+      - name: Prepare GitHub release
+        id: github_release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.build-and-verify.outputs.version }}
+          FILE_NAME: ${{ needs.build-and-verify.outputs.file_name }}
+        run: |
+          set -euo pipefail
+
+          title="Shulker Box Uncrafting $VERSION"
+          release_json="dist/github-release.json"
+          release_error="dist/github-release-error.txt"
+
+          if gh release view "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json assets,body,isDraft,isPrerelease,name,tagName \
+            > "$release_json" 2> "$release_error"; then
+            if ! jq -e --arg tag "$GITHUB_REF_NAME" '.tagName == $tag' "$release_json" > /dev/null; then
+              echo "::error title=GitHub release mismatch::The existing release uses a different tag."
+              exit 1
+            fi
+
+            if ! jq -e \
+              --arg primary "$FILE_NAME" \
+              'all(.assets[]; .name == $primary or .name == "SHA256SUMS")' \
+              "$release_json" > /dev/null; then
+              echo "::error title=Unexpected GitHub asset::The existing release contains an asset that this workflow does not manage."
+              exit 1
+            fi
+
+            if [[ "$(jq -r '.isDraft' "$release_json")" == "false" ]]; then
+              expected_body="$(cat dist/release-notes.md)"
+              if ! jq -e \
+                --arg title "$title" \
+                --arg body "$expected_body" \
+                '.isPrerelease == false and
+                  .name == $title and
+                  (((.body // "") | sub("[\\r\\n]+$"; "")) ==
+                    ($body | sub("[\\r\\n]+$"; "")))' \
+                "$release_json" > /dev/null; then
+                echo "::error title=GitHub release mismatch::The published release uses different title, notes, or channel metadata."
+                exit 1
+              fi
+
+              existing_dir="dist/existing-github-release"
+              mkdir -p "$existing_dir"
+              gh release download "$GITHUB_REF_NAME" \
+                --repo "$GITHUB_REPOSITORY" \
+                --dir "$existing_dir"
+
+              shopt -s nullglob
+              downloaded=("$existing_dir"/*)
+              if [[ ${#downloaded[@]} -ne 2 \
+                || ! -f "$existing_dir/$FILE_NAME" \
+                || ! -f "$existing_dir/SHA256SUMS" ]]; then
+                echo "::error title=Incomplete GitHub release::The published release does not contain the expected two assets."
+                exit 1
+              fi
+
+              for asset in "$FILE_NAME" SHA256SUMS; do
+                if ! cmp --silent "dist/$asset" "$existing_dir/$asset"; then
+                  echo "::error title=GitHub asset mismatch::$asset differs from the verified release bundle."
+                  exit 1
+                fi
+              done
+
+              echo "already_published=true" >> "$GITHUB_OUTPUT"
+              echo "GitHub release $GITHUB_REF_NAME is already published with the verified assets."
+              exit 0
+            fi
+
+            gh release edit "$GITHUB_REF_NAME" \
+              --repo "$GITHUB_REPOSITORY" \
+              --draft=true \
+              --prerelease=false \
+              --title "$title" \
+              --notes-file "dist/release-notes.md"
+            gh release upload "$GITHUB_REF_NAME" \
+              "dist/$FILE_NAME" \
+              "dist/SHA256SUMS" \
+              --repo "$GITHUB_REPOSITORY" \
+              --clobber
+          else
+            if ! gh api "repos/${GITHUB_REPOSITORY}" --silent > /dev/null; then
+              cat "$release_error"
+              echo "::error title=GitHub preflight failed::Could not check for an existing release."
+              exit 1
+            fi
+
+            gh release create "$GITHUB_REF_NAME" \
+              "dist/$FILE_NAME" \
+              "dist/SHA256SUMS" \
+              --repo "$GITHUB_REPOSITORY" \
+              --verify-tag \
+              --draft \
+              --title "$title" \
+              --notes-file "dist/release-notes.md"
+          fi
+
+          echo "already_published=false" >> "$GITHUB_OUTPUT"
+
+      - name: Publish to Modrinth
+        shell: bash
+        env:
+          MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
+          MODRINTH_PROJECT_ID: ${{ vars.MODRINTH_PROJECT_ID }}
+          RECIPE_REMAINDERS_PROJECT_ID: ${{ vars.RECIPE_REMAINDERS_PROJECT_ID }}
+          VERSION: ${{ needs.build-and-verify.outputs.version }}
+          MINECRAFT_VERSION: ${{ needs.build-and-verify.outputs.minecraft_version }}
+          FILE_NAME: ${{ needs.build-and-verify.outputs.file_name }}
+        run: |
+          set -euo pipefail
+
+          user_agent="brandonhenness/shulker-box-uncrafting/${VERSION} (https://github.com/${GITHUB_REPOSITORY})"
+
+          jq -n \
+            --arg project_id "$MODRINTH_PROJECT_ID" \
+            --arg dependency_project_id "$RECIPE_REMAINDERS_PROJECT_ID" \
+            --arg name "Shulker Box Uncrafting $VERSION" \
+            --arg version "$VERSION" \
+            --rawfile changelog dist/release-notes.md \
+            --arg game_version "$MINECRAFT_VERSION" \
+            '{
+              project_id: $project_id,
+              name: $name,
+              version_number: $version,
+              changelog: $changelog,
+              dependencies: [
+                {
+                  project_id: $dependency_project_id,
+                  dependency_type: "required"
+                },
+                {
+                  project_id: "P7dR8mSH",
+                  dependency_type: "required"
+                }
+              ],
+              game_versions: [$game_version],
+              version_type: "release",
+              loaders: ["datapack"],
+              featured: true,
+              status: "listed",
+              file_parts: ["primary"],
+              primary_file: "primary",
+              environment: "server_only"
+            }' > dist/modrinth-version.json
+
+          jq --arg version "$VERSION" \
+            '[.[] | select(.version_number == $version)]' \
+            dist/modrinth-versions.json \
+            > dist/matching-modrinth-versions.json
+
+          match_count="$(jq 'length' dist/matching-modrinth-versions.json)"
+          if [[ "$match_count" -gt 1 ]]; then
+            echo "::error title=Duplicate Modrinth versions::More than one version uses version number $VERSION."
+            exit 1
+          fi
+
+          if [[ "$match_count" -eq 1 ]]; then
+            primary_sha512="$(sha512sum "dist/$FILE_NAME" | awk '{print $1}')"
+
+            if ! jq -e \
+              --arg project_id "$MODRINTH_PROJECT_ID" \
+              --arg dependency_project_id "$RECIPE_REMAINDERS_PROJECT_ID" \
+              --arg name "Shulker Box Uncrafting $VERSION" \
+              --arg version "$VERSION" \
+              --arg game_version "$MINECRAFT_VERSION" \
+              --rawfile changelog dist/release-notes.md \
+              --arg primary_name "$FILE_NAME" \
+              --arg primary_sha512 "$primary_sha512" \
+              '.[0] |
+                .project_id == $project_id and
+                .name == $name and
+                .version_number == $version and
+                (((.changelog // "") | sub("[\\r\\n]+$"; "")) ==
+                  ($changelog | sub("[\\r\\n]+$"; ""))) and
+                .version_type == "release" and
+                .game_versions == [$game_version] and
+                .loaders == ["datapack"] and
+                .featured == true and
+                .status == "listed" and
+                .environment == "server_only" and
+                (.dependencies | length == 2) and
+                ([.dependencies[] | select(
+                  .project_id == $dependency_project_id and
+                  .dependency_type == "required"
+                )] | length == 1) and
+                ([.dependencies[] | select(
+                  .project_id == "P7dR8mSH" and
+                  .dependency_type == "required"
+                )] | length == 1) and
+                (.files | length == 1) and
+                ([.files[] | select(
+                  .filename == $primary_name and
+                  .primary == true and
+                  .hashes.sha512 == $primary_sha512
+                )] | length == 1)' \
+              dist/matching-modrinth-versions.json > /dev/null; then
+              echo "::error title=Modrinth version mismatch::Version $VERSION already exists, but its file or metadata differs from this release."
+              exit 1
+            fi
+
+            echo "Modrinth version $VERSION already contains the verified file and metadata."
+            exit 0
+          fi
+
+          response_file="dist/modrinth-response.json"
+          if ! curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "Authorization: $MODRINTH_TOKEN" \
+            --header "User-Agent: $user_agent" \
+            --form "data=<dist/modrinth-version.json;type=application/json" \
+            --form "primary=@dist/${FILE_NAME};type=application/zip" \
+            "https://api.modrinth.com/v2/version" \
+            --output "$response_file"; then
+            echo "::error title=Modrinth upload failed::The API rejected or could not complete the version upload."
+            if [[ -s "$response_file" ]]; then
+              jq . "$response_file" 2> /dev/null || cat "$response_file"
+            fi
+            exit 1
+          fi
+
+          jq -e \
+            --arg project_id "$MODRINTH_PROJECT_ID" \
+            --arg version "$VERSION" \
+            '.project_id == $project_id and .version_number == $version' \
+            "$response_file" > /dev/null
+
+      - name: Publish GitHub release
+        if: steps.github_release.outputs.already_published != 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false

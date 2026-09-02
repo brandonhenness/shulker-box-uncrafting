@@ -1,0 +1,16 @@
+# Packaged releases
+/dist/
+/build/
+
+# Editors
+/.idea/
+/.vscode/
+*.iml
+
+# Operating systems
+.DS_Store
+Thumbs.db
+
+# Local release notes and credentials
+/docs/MODRINTH_RELEASE.md
+*.env

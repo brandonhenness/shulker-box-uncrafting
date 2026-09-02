@@ -1,0 +1,68 @@
+name: Validate
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: validate-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate and package datapack
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Read release metadata
+        id: metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          read_property() {
+            local key="$1"
+            sed -n "s/^${key}=//p" release.properties | tail -n 1 | tr -d '\r'
+          }
+
+          version="$(read_property version)"
+          minecraft_version="$(read_property minecraft_version)"
+          archive_name="$(read_property archive_name)"
+
+          if [[ -z "$version" || -z "$minecraft_version" || -z "$archive_name" ]]; then
+            echo "::error title=Missing release metadata::version, minecraft_version, and archive_name are required."
+            exit 1
+          fi
+
+          echo "file_name=${archive_name}-${version}+mc${minecraft_version}.zip" >> "$GITHUB_OUTPUT"
+
+      - name: Validate and package datapack
+        shell: pwsh
+        run: ./scripts/build.ps1 -OutputDirectory dist
+
+      - name: Verify package checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum --check SHA256SUMS
+
+      - name: Upload validated datapack
+        uses: actions/upload-artifact@v7
+        with:
+          name: shulker-box-uncrafting-${{ github.sha }}
+          path: |
+            dist/${{ steps.metadata.outputs.file_name }}
+            dist/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 14
