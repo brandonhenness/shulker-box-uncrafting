@@ -2,7 +2,7 @@
 
 All notable changes to Shulker Box Uncrafting are documented here.
 
-## [1.0.0] - 2026-09-01
+## [0.1.0] - 2026-09-02
 
 First stable release for Minecraft 26.2.
 
@@ -23,4 +23,4 @@ First stable release for Minecraft 26.2.
 - Fabric API `0.158.0+26.2` or newer for Minecraft 26.2 on the server
 - Recipe Remainders `0.1.0` or a compatible newer version on the server
 
-[1.0.0]: https://github.com/brandonhenness/shulker-box-uncrafting/releases/tag/v1.0.0
+[0.1.0]: https://github.com/brandonhenness/shulker-box-uncrafting/releases/tag/v0.1.0

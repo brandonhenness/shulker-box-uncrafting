@@ -46,7 +46,7 @@ jobs:
           archive_name="$(read_property archive_name)"
 
           if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "::error title=Invalid release tag::Use a tag such as v1.0.0."
+            echo "::error title=Invalid release tag::Use a tag such as v0.1.0."
             exit 1
           fi
 

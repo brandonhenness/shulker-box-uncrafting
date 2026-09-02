@@ -34,7 +34,7 @@ body:
     attributes:
       label: Versions
       description: List Minecraft, Shulker Box Uncrafting, Recipe Remainders, Fabric Loader, Fabric API, and Java versions.
-      placeholder: "Minecraft 26.2; datapack 1.0.0; Recipe Remainders 0.1.0; Loader 0.19.3; Fabric API 0.158.0+26.2; Java 25"
+      placeholder: "Minecraft 26.2; datapack 0.1.0; Recipe Remainders 0.1.0; Loader 0.19.3; Fabric API 0.158.0+26.2; Java 25"
     validations:
       required: true
 

@@ -18,7 +18,7 @@ The release workflow uses Fabric API's Modrinth project ID directly and declares
 2. Add a changelog heading in this exact form:
 
    ```markdown
-   ## [1.0.0] - 2026-09-01
+   ## [0.1.0] - 2026-09-02
    ```
 
 3. Confirm that the dependency versions in `README.md` and `docs/MODRINTH_DESCRIPTION.md` are still correct.
@@ -34,11 +34,11 @@ The release workflow uses Fabric API's Modrinth project ID directly and declares
 
 ## Publish
 
-Replace `1.0.0` below with the version from `release.properties`:
+Replace `0.1.0` below with the version from `release.properties`:
 
 ```powershell
-git tag -a v1.0.0 -m "Shulker Box Uncrafting 1.0.0"
-git push origin v1.0.0
+git tag -a v0.1.0 -m "Shulker Box Uncrafting 0.1.0"
+git push origin v0.1.0
 ```
 
 The tag must be named `vX.Y.Z`, match `release.properties`, point to a commit contained in `main`, and have a matching dated changelog section.
@@ -69,10 +69,10 @@ GitHub's automatic Source code archives are not datapack downloads. Direct users
 Read the failed workflow step before changing the tag. If nothing was published, fix the repository, delete the local and remote tag, recreate it on the corrected commit, and push it again:
 
 ```powershell
-git tag -d v1.0.0
-git push origin :refs/tags/v1.0.0
-git tag -a v1.0.0 -m "Shulker Box Uncrafting 1.0.0"
-git push origin v1.0.0
+git tag -d v0.1.0
+git push origin :refs/tags/v0.1.0
+git tag -a v0.1.0 -m "Shulker Box Uncrafting 0.1.0"
+git push origin v0.1.0
 ```
 
 Do not move or reuse a tag after a GitHub or Modrinth release is public. Publish a new patch version instead.
