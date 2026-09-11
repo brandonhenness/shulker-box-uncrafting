@@ -1,5 +1,9 @@
 # Shulker Box Uncrafting
 
+> ## IMPORTANT: REQUIRED MOD
+>
+> **[Recipe Remainders](https://modrinth.com/mod/recipe-remainders) is required for this datapack to work.** Install it on the server, or in the client installation for singleplayer, before using this datapack. The datapack will not work without it.
+
 Turn an empty shulker box back into the chest and two shells used to craft it.
 
 ![An empty shulker box being uncrafted into two shells while its chest returns to the crafting grid](https://raw.githubusercontent.com/brandonhenness/shulker-box-uncrafting/refs/heads/main/.github/assets/shulker-box-uncrafting-demo.gif)
@@ -26,6 +30,8 @@ The server needs:
 - [Recipe Remainders](https://modrinth.com/mod/recipe-remainders) 0.1.0 or a compatible newer version
 
 Recipe Remainders and Fabric API are required on the server. This datapack does not work on a vanilla server.
+
+If Recipe Remainders is missing from the server, joining players receive a one-time warning. Players do not need the mod on their clients; the warning checks the server installation.
 
 Vanilla Minecraft 26.2 clients can connect without installing Fabric Loader, Fabric API, or Recipe Remainders. Installing Fabric API and Recipe Remainders on a Fabric client is optional. The optional client installation makes the returned chest appear immediately and lets the recipe book distinguish empty boxes from filled ones.
 

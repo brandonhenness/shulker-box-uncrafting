@@ -2,6 +2,13 @@
 
 All notable changes to Shulker Box Uncrafting are documented here.
 
+## [0.1.1] - 2026-09-11
+
+### Added
+
+- A server-side warning when Recipe Remainders is missing.
+- Documentation explaining that Recipe Remainders is required on the server, not on clients.
+
 ## [0.1.0] - 2026-09-02
 
 First stable release for Minecraft 26.2.

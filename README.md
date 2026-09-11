@@ -71,6 +71,8 @@ A vanilla client may still highlight the recipe while the player has only a fill
 
 On a Fabric server with Fabric API but without Recipe Remainders, the recipe and its recipe-book unlock are skipped. The datapack will not add a broken recipe that consumes a box without returning its chest.
 
+Players joining a server without Recipe Remainders receive a one-time warning from the server. Players do not need the mod on their clients; the warning checks whether the server has the mod installed.
+
 A vanilla server cannot read the Fabric ingredient used by this pack. Remove or disable the pack before moving the world to a vanilla server.
 
 ## Troubleshooting
